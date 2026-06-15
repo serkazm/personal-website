@@ -181,6 +181,60 @@ h2 {
   height: 22px;
 }
 
+/* Time-of-day slider */
+#time-slider {
+  position: fixed;
+  bottom: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 1rem;
+  background: rgba(8, 18, 38, 0.55);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 999px;
+  z-index: 50;
+  color: var(--color-text);
+}
+
+#time-slider .time-icon {
+  font-size: 1rem;
+  opacity: 0.85;
+}
+
+#tod {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 180px;
+  height: 4px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+#tod::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: 2px solid var(--color-accent);
+  cursor: grab;
+}
+
+#tod::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: 2px solid var(--color-accent);
+  cursor: grab;
+}
+
 /* Footer */
 footer {
   text-align: center;

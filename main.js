@@ -1,10 +1,46 @@
 const canvas = document.getElementById('bg-canvas');
 const ctx = canvas.getContext('2d');
+const todSlider = document.getElementById('tod');
 
 let W = 0, H = 0;
 let scrollRatio = 0;
 let scrollPhase = 0;
 let stars = [];
+
+// Time-of-day palette stops. Each stop has sky top/mid/bottom colours,
+// a wave tint, and a star alpha multiplier.
+const TOD_STOPS = [
+  { t: 0.00, top: [  2, 12, 27], mid: [  3, 48,107], bot: [  0,102,204], wave: [ 80,160,255], starA: 1.0 }, // midnight
+  { t: 0.20, top: [ 20, 25, 60], mid: [ 70, 50,100], bot: [180,110,120], wave: [110,140,200], starA: 0.4 }, // pre-dawn
+  { t: 0.30, top: [255,170,110], mid: [255,200,160], bot: [255,225,190], wave: [200,210,230], starA: 0.0 }, // sunrise
+  { t: 0.50, top: [105,180,225], mid: [165,210,238], bot: [215,235,248], wave: [170,215,245], starA: 0.0 }, // noon
+  { t: 0.70, top: [255,150, 90], mid: [255,135,110], bot: [255,200,140], wave: [215,180,180], starA: 0.0 }, // sunset
+  { t: 0.80, top: [ 45, 30, 80], mid: [ 80, 55,115], bot: [130,100,140], wave: [110,140,200], starA: 0.5 }, // dusk
+  { t: 1.00, top: [  2, 12, 27], mid: [  3, 48,107], bot: [  0,102,204], wave: [ 80,160,255], starA: 1.0 }, // midnight
+];
+
+function lerp(a, b, k) { return a + (b - a) * k; }
+function lerpColor(c1, c2, k) {
+  return [Math.round(lerp(c1[0], c2[0], k)), Math.round(lerp(c1[1], c2[1], k)), Math.round(lerp(c1[2], c2[2], k))];
+}
+function rgb(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+function paletteAt(t) {
+  for (let i = 0; i < TOD_STOPS.length - 1; i++) {
+    const a = TOD_STOPS[i], b = TOD_STOPS[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const k = (t - a.t) / (b.t - a.t);
+      return {
+        top: lerpColor(a.top, b.top, k),
+        mid: lerpColor(a.mid, b.mid, k),
+        bot: lerpColor(a.bot, b.bot, k),
+        wave: lerpColor(a.wave, b.wave, k),
+        starA: lerp(a.starA, b.starA, k),
+      };
+    }
+  }
+  return TOD_STOPS[0];
+}
 
 function randomStars() {
   stars = Array.from({ length: 7 }, () => ({
@@ -167,21 +203,51 @@ function draw(timestamp) {
 
   scrollPhase = scrollRatio * Math.PI * 6;
 
-  // Background gradient
+  const tod = todSlider ? (parseFloat(todSlider.value) / 1000) : 0;
+  const pal = paletteAt(tod);
+
+  // Sky gradient
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#020c1b');
-  grad.addColorStop(0.5, '#03306b');
-  grad.addColorStop(1, '#0066cc');
+  grad.addColorStop(0, rgb(pal.top, 1));
+  grad.addColorStop(0.5, rgb(pal.mid, 1));
+  grad.addColorStop(1, rgb(pal.bot, 1));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Stars
-  for (const star of stars) {
-    const alpha = 0.4 + 0.5 * Math.sin(t * star.twinkleSpeed + star.twinkleOffset);
-    drawStar(star.x * W, star.y * H, star.r, alpha);
+  // Stars (fade out around dawn / back in at dusk)
+  if (pal.starA > 0.01) {
+    for (const star of stars) {
+      const twinkle = 0.4 + 0.5 * Math.sin(t * star.twinkleSpeed + star.twinkleOffset);
+      drawStar(star.x * W, star.y * H, star.r, twinkle * pal.starA);
+    }
   }
 
-  // Waves
+  // Sun — visible from sunrise (0.25) through sunset (0.75), arcing across the sky
+  if (tod > 0.25 && tod < 0.75) {
+    const k = (tod - 0.25) / 0.5;           // 0 at sunrise, 1 at sunset
+    const sunX = lerp(W * 0.1, W * 0.9, k);
+    const sunY = H * 0.55 - Math.sin(k * Math.PI) * H * 0.40;
+    const horizonGlow = Math.sin(k * Math.PI);   // 0 at horizon, 1 at noon
+    const sunR = 28 + horizonGlow * 10;
+    // Soft halo
+    const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.4, sunX, sunY, sunR * 4);
+    halo.addColorStop(0, `rgba(255, 240, 200, ${0.45 + horizonGlow * 0.25})`);
+    halo.addColorStop(1, 'rgba(255, 240, 200, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunR * 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Sun disc — warmer near horizon, brighter at noon
+    const sunColor = horizonGlow > 0.6
+      ? [255, 248, 220]
+      : [255, lerp(170, 230, horizonGlow), lerp(110, 180, horizonGlow)];
+    ctx.fillStyle = rgb(sunColor, 1);
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Waves — tinted by current palette
   for (const layer of layers) {
     const baseY = H * layer.y;
     ctx.beginPath();
@@ -197,7 +263,7 @@ function draw(timestamp) {
     ctx.lineTo(W, H);
     ctx.lineTo(0, H);
     ctx.closePath();
-    ctx.fillStyle = `rgba(80, 160, 255, ${layer.alpha})`;
+    ctx.fillStyle = rgb(pal.wave, layer.alpha);
     ctx.fill();
   }
 
